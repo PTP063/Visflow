@@ -21,8 +21,8 @@ graph LR
     end
 
     subgraph Backend [FastAPI Server]
-        API[/pipelines/parse]
-        DAG[Kahn's Algorithm DAG Validator]
+        API["/pipelines/parse"]
+        DAG["Kahn's Algorithm DAG Validator"]
         API --> DAG
     end
 
