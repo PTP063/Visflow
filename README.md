@@ -1,6 +1,33 @@
 # Visflow — Visual Pipeline Builder
 
+![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
+![ReactFlow](https://img.shields.io/badge/ReactFlow-FF0072?style=for-the-badge&logo=react&logoColor=white)
+![Zustand](https://img.shields.io/badge/Zustand-443E38?style=for-the-badge&logo=react&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
+
 A modular, drag-and-drop workflow pipeline builder built with **React**, **ReactFlow**, **Zustand**, and **FastAPI**. Users can interactively construct pipelines on a canvas using extensible node components, wire nodes together, and parse the graph on the backend to validate structure and detect Directed Acyclic Graph (DAG) cycles.
+
+## 🏗️ Architecture Overview
+
+```mermaid
+graph LR
+    subgraph Frontend [React App]
+        Canvas[ReactFlow Canvas]
+        Store[Zustand State]
+        Toolbar[Node Toolbar]
+        Canvas <--> Store
+        Toolbar --> Canvas
+    end
+
+    subgraph Backend [FastAPI Server]
+        API[/pipelines/parse]
+        DAG[Kahn's Algorithm DAG Validator]
+        API --> DAG
+    end
+
+    Store -- POST {nodes, edges} --> API
+```
 
 ---
 
