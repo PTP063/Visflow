@@ -2,6 +2,7 @@ import { PipelineToolbar } from './toolbar';
 import { PipelineUI } from './ui';
 import { SubmitButton } from './submit';
 import { Toast } from './Toast';
+import { PipelineModal } from './PipelineModal';
 import { useStore } from './store';
 import { shallow } from 'zustand/shallow';
 
@@ -9,13 +10,12 @@ const selector = (state) => ({
   toast: state.toast,
   setToast: state.setToast,
   clearToast: state.clearToast,
+  modalData: state.modalData,
+  clearModalData: state.clearModalData,
 });
 
 function App() {
-  // Toast state lives in the store (not local useState) because it needs
-  // to be settable from outside a component too — onConnect in store.js
-  // fires a toast directly when it blocks a cycle-creating connection.
-  const { toast, setToast, clearToast } = useStore(selector, shallow);
+  const { toast, setToast, clearToast, modalData, clearModalData } = useStore(selector, shallow);
 
   return (
     <div className="app">
@@ -23,8 +23,10 @@ function App() {
       <PipelineUI />
       <SubmitButton onResult={setToast} />
       <Toast toast={toast} onClose={clearToast} />
+      {modalData && <PipelineModal data={modalData} onClose={clearModalData} />}
     </div>
   );
 }
 
 export default App;
+

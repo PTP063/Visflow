@@ -1,20 +1,15 @@
-"""
-VectorShift Pipeline Builder — backend
----------------------------------------
-Single responsibility: given a pipeline's nodes/edges, report how big it is
-and whether it's a valid DAG. Kept intentionally small — this is the
-"simple backend" the assessment describes, not a pipeline execution engine.
-"""
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
-app = FastAPI(title="VectorShift Pipeline Parser")
+app = FastAPI(
+    title="Visflow Pipeline Engine",
+    description="High-performance pipeline parsing and DAG cycle detection engine",
+    version="1.1.0"
+)
 
-# Wide-open CORS is fine for a take-home / local dev; a real deployment
-# would restrict this to the actual frontend origin(s).
+# Wide-open CORS is fine for local dev; a real deployment would restrict this.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -25,48 +20,57 @@ app.add_middleware(
 
 
 class Pipeline(BaseModel):
-    """Raw ReactFlow state. We deliberately accept nodes/edges as loosely
-    typed dicts (Dict[str, Any]) rather than a strict schema — the frontend
-    node shape evolves independently of this endpoint, and all we actually
-    need from each object is its id / source / target."""
-
+    """Raw ReactFlow state. We accept nodes/edges as loosely typed dicts."""
     nodes: List[Dict[str, Any]] = Field(default_factory=list)
     edges: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class ParseResponse(BaseModel):
-    """Matches the schema the assessment specifies exactly
-    ({num_nodes, num_edges, is_dag}); cycle_nodes is additive and safe to
-    ignore for any consumer that only reads the three required fields."""
-
+    """Pipeline analysis response schema.
+    Backward-compatible with original assessment contract:
+    {num_nodes, num_edges, is_dag}, with additive cycle_nodes and topological_order.
+    """
     num_nodes: int
     num_edges: int
     is_dag: bool
     cycle_nodes: Optional[List[str]] = None
+    topological_order: Optional[List[str]] = None
+    num_components: Optional[int] = None
 
 
 @app.get('/')
 def read_root():
-    return {'Ping': 'Pong'}
+    return {
+        'name': 'Visflow Pipeline API',
+        'status': 'online',
+        'version': '1.1.0',
+        'Ping': 'Pong'
+    }
 
 
-def find_cycle_nodes(node_ids: List[str], edges: List[Dict[str, Any]]) -> List[str]:
-    """Kahn's algorithm (topological sort by repeated removal of in-degree-0
-    nodes), O(V + E). Rather than a boolean, this returns the list of nodes
-    that could *not* be removed — i.e. the nodes involved in (or downstream
-    of) a cycle. An empty list means the graph is a DAG.
+@app.get('/health')
+def health_check():
+    return {
+        'status': 'healthy',
+        'service': 'visflow-backend',
+        'version': '1.1.0',
+        'endpoints': ['/pipelines/parse', '/health', '/']
+    }
 
-    Handles, without special-casing:
-      - disconnected subgraphs   (each component's roots just enter the
-                                   queue independently; no cross-component
-                                   dependency assumed)
-      - self-referencing nodes    (a self-loop gives a node in-degree >= 1
-                                   from itself, so it can never reach 0)
-      - empty pipelines           (node_ids == [] -> nothing to remove ->
-                                   trivially a DAG)
-      - edges to/from unknown ids (silently ignored — malformed edge data
-                                   shouldn't crash graph validation)
+
+def find_cycle_nodes_and_order(
+    node_ids: List[str], edges: List[Dict[str, Any]]
+) -> Tuple[List[str], List[str]]:
+    """Kahn's algorithm (topological sort by repeated removal of in-degree-0 nodes).
+    Time Complexity: O(V + E)
+    Returns:
+        (cycle_nodes, topological_order)
+        - cycle_nodes: list of node IDs that could not be resolved (empty if DAG)
+        - topological_order: computed execution sequence if DAG, else empty list
     """
+    if not node_ids:
+        return [], []
+
     adjacency: Dict[str, List[str]] = {nid: [] for nid in node_ids}
     in_degree: Dict[str, int] = {nid: 0 for nid in node_ids}
 
@@ -77,30 +81,72 @@ def find_cycle_nodes(node_ids: List[str], edges: List[Dict[str, Any]]) -> List[s
         adjacency[source].append(target)
         in_degree[target] += 1
 
+    # Queue of nodes with 0 in-degree
     queue = [nid for nid in node_ids if in_degree[nid] == 0]
-    removed = set()
+    removed_order: List[str] = []
+    removed_set = set()
 
     while queue:
-        current = queue.pop()
-        removed.add(current)
+        current = queue.pop(0)  # FIFO for natural order
+        removed_order.append(current)
+        removed_set.add(current)
         for neighbor in adjacency[current]:
             in_degree[neighbor] -= 1
             if in_degree[neighbor] == 0:
                 queue.append(neighbor)
 
-    # Anything never removed is part of (or downstream of) a cycle.
-    # Preserve original node order for a stable, readable response.
-    return [nid for nid in node_ids if nid not in removed]
+    stuck_nodes = [nid for nid in node_ids if nid not in removed_set]
+    topological_order = removed_order if len(stuck_nodes) == 0 else []
+
+    return stuck_nodes, topological_order
+
+
+def find_cycle_nodes(node_ids: List[str], edges: List[Dict[str, Any]]) -> List[str]:
+    """Backward-compatible helper function."""
+    stuck_nodes, _ = find_cycle_nodes_and_order(node_ids, edges)
+    return stuck_nodes
+
+
+def count_connected_components(node_ids: List[str], edges: List[Dict[str, Any]]) -> int:
+    """Computes number of weakly connected components in the pipeline graph."""
+    if not node_ids:
+        return 0
+    adj: Dict[str, List[str]] = {nid: [] for nid in node_ids}
+    for edge in edges:
+        s, t = edge.get('source'), edge.get('target')
+        if s in adj and t in adj:
+            adj[s].append(t)
+            adj[t].append(s)
+
+    visited = set()
+    components = 0
+    for nid in node_ids:
+        if nid not in visited:
+            components += 1
+            stack = [nid]
+            visited.add(nid)
+            while stack:
+                curr = stack.pop()
+                for neighbor in adj[curr]:
+                    if neighbor not in visited:
+                        visited.add(neighbor)
+                        stack.append(neighbor)
+    return components
 
 
 @app.post('/pipelines/parse', response_model=ParseResponse)
 def parse_pipeline(pipeline: Pipeline) -> ParseResponse:
-    node_ids = [node.get('id') for node in pipeline.nodes]
-    stuck_nodes = find_cycle_nodes(node_ids, pipeline.edges)
+    node_ids = [node.get('id') for node in pipeline.nodes if node.get('id') is not None]
+    stuck_nodes, topo_order = find_cycle_nodes_and_order(node_ids, pipeline.edges)
+    num_components = count_connected_components(node_ids, pipeline.edges)
+    is_dag = len(stuck_nodes) == 0
 
     return ParseResponse(
         num_nodes=len(pipeline.nodes),
         num_edges=len(pipeline.edges),
-        is_dag=len(stuck_nodes) == 0,
+        is_dag=is_dag,
         cycle_nodes=stuck_nodes or None,
+        topological_order=topo_order if is_dag and topo_order else None,
+        num_components=num_components if pipeline.nodes else 0,
     )
+

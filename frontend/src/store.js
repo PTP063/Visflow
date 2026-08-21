@@ -14,8 +14,17 @@ export const useStore = createWithEqualityFn((set, get) => ({
     edges: [],
     nodeIDs: {},
     toast: null,
+    modalData: null,
+    isAnalyzing: false,
+    activeCategory: 'all',
+
     setToast: (toast) => set({ toast }),
     clearToast: () => set({ toast: null }),
+    setModalData: (modalData) => set({ modalData }),
+    clearModalData: () => set({ modalData: null }),
+    setIsAnalyzing: (isAnalyzing) => set({ isAnalyzing }),
+    setActiveCategory: (activeCategory) => set({ activeCategory }),
+
     getNodeID: (type) => {
         const newIDs = {...get().nodeIDs};
         if (newIDs[type] === undefined) {
@@ -28,6 +37,28 @@ export const useStore = createWithEqualityFn((set, get) => ({
     addNode: (node) => {
         set({
             nodes: [...get().nodes, node]
+        });
+    },
+    deleteNode: (nodeId) => {
+        set({
+            nodes: get().nodes.filter((node) => node.id !== nodeId),
+            edges: get().edges.filter(
+                (edge) => edge.source !== nodeId && edge.target !== nodeId
+            ),
+        });
+    },
+    clearCanvas: () => {
+        set({
+            nodes: [],
+            edges: [],
+            nodeIDs: {},
+        });
+    },
+    loadTemplate: (template) => {
+        set({
+            nodes: template.nodes || [],
+            edges: template.edges || [],
+            nodeIDs: template.nodeIDs || {},
         });
     },
     onNodesChange: (changes) => {
@@ -46,8 +77,8 @@ export const useStore = createWithEqualityFn((set, get) => ({
       if (wouldCreateCycle(source, target, get().edges)) {
         get().setToast({
           variant: 'error',
-          title: 'Connection blocked',
-          message: 'That connection would create a cycle in the pipeline.',
+          title: 'Connection Blocked',
+          message: 'That connection would create a cyclic dependency in the pipeline.',
         });
         return;
       }
@@ -58,10 +89,12 @@ export const useStore = createWithEqualityFn((set, get) => ({
             ...connection,
             type: 'smoothstep',
             animated: true,
+            style: { stroke: '#818cf8', strokeWidth: 2 },
             markerEnd: {
-              type: MarkerType.Arrow,
-              height: '20px',
-              width: '20px',
+              type: MarkerType.ArrowClosed,
+              height: 18,
+              width: 18,
+              color: '#818cf8',
             },
           },
           get().edges
@@ -78,3 +111,4 @@ export const useStore = createWithEqualityFn((set, get) => ({
       });
     },
   }));
+

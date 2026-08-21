@@ -26,17 +26,30 @@ let measureCanvas = null;
 
 export const measureTextWidth = (text, font = '13px -apple-system, sans-serif') => {
   if (!text) return 0;
+  // Non-browser / Jest jsdom fallback: avoid unhandled not-implemented warnings
+  if (
+    typeof window !== 'undefined' &&
+    window.navigator &&
+    window.navigator.userAgent &&
+    window.navigator.userAgent.includes('jsdom')
+  ) {
+    return text.length * 7;
+  }
   try {
+    if (typeof document === 'undefined' || typeof document.createElement !== 'function') {
+      return text.length * 7;
+    }
     if (!measureCanvas) measureCanvas = document.createElement('canvas');
+    if (!measureCanvas.getContext) return text.length * 7;
     const ctx = measureCanvas.getContext('2d');
-    if (!ctx) throw new Error('no 2d context');
+    if (!ctx) return text.length * 7;
     ctx.font = font;
     return ctx.measureText(text).width;
   } catch {
-    // jsdom / non-browser fallback: rough average glyph width
     return text.length * 7;
   }
 };
 
 export const longestLineWidth = (text, font) =>
   text.split('\n').reduce((max, line) => Math.max(max, measureTextWidth(line, font)), 0);
+

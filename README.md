@@ -1,4 +1,4 @@
-# Visflow — Visual Pipeline Builder
+# Visflow — Visual Workflow & AI Pipeline Builder
 
 ![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![ReactFlow](https://img.shields.io/badge/ReactFlow-FF0072?style=for-the-badge&logo=react&logoColor=white)
@@ -6,169 +6,110 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
 
-A modular, drag-and-drop workflow pipeline builder built with **React**, **ReactFlow**, **Zustand**, and **FastAPI**. Users can interactively construct pipelines on a canvas using extensible node components, wire nodes together, and parse the graph on the backend to validate structure and detect Directed Acyclic Graph (DAG) cycles.
+A modern, glassmorphic visual workflow pipeline builder built with **React**, **ReactFlow**, **Zustand**, and **FastAPI**. Users can interactively construct pipelines on a dark cyber canvas using extensible node components, wire data streams together, test pre-built templates, and analyze DAG structures with Kahn's Algorithm on the backend.
+
+---
+
+## ⚡ Key Highlights & UI/UX Features
+
+- **💎 Modern Dark Glassmorphism Design System**: Built with Plus Jakarta Sans and JetBrains Mono typography, radial glow backgrounds, glassmorphic panels, and neon accent borders.
+- **✨ One-Click Starter Templates**: Pre-configured pipeline templates (*AI Q&A Chain*, *Document Summarizer & Classifier*, *API Data Transformer*) ready to load instantly.
+- **📊 Interactive Pipeline Inspector Modal**: Detailed topological execution order timeline, connected component counts, cycle node diagnostics, and raw graph JSON export.
+- **🏷️ Categorized Node Toolbar**: Filter nodes by category (*All*, *AI & Models*, *Data I/O*, *Logic & Math*, *Services*, *Notes*) with live search filtering.
+- **❌ In-Node Delete & Controls**: Quick-delete buttons directly on nodes, custom form controls, and glowing connection ports.
+- **📝 Dynamic Text & Variable Extraction**: Automatic parsing of `{{variable}}` tokens into real-time input ports with token badges and canvas-measured auto-resizing.
+- **⚡ Hotkeys**: Press <kbd>Ctrl</kbd>+<kbd>Enter</kbd> (or <kbd>Cmd</kbd>+<kbd>Enter</kbd>) anytime to verify and analyze the current pipeline graph.
+
+---
 
 ## 🏗️ Architecture Overview
 
 ```mermaid
 graph LR
-    subgraph Frontend [React App]
-        Canvas[ReactFlow Canvas]
-        Store[Zustand State]
-        Toolbar[Node Toolbar]
-        Canvas <--> Store
+    subgraph Frontend ["React + ReactFlow UI"]
+        Toolbar["Node Palette & Categories"]
+        Canvas["Interactive Flow Canvas"]
+        Store["Zustand Store (State + Actions)"]
+        Inspector["Pipeline Analysis Modal & Toasts"]
+        
         Toolbar --> Canvas
+        Canvas <--> Store
+        Store --> Inspector
     end
 
-    subgraph Backend [FastAPI Server]
-        API["/pipelines/parse"]
-        DAG["Kahn's Algorithm DAG Validator"]
-        API --> DAG
+    subgraph Backend ["FastAPI Engine"]
+        API["POST /pipelines/parse"]
+        Health["GET /health"]
+        Kahn["Kahn's Algorithm (O(V+E))"]
+        Topo["Topological Execution Sorter"]
+        
+        API --> Kahn
+        Kahn --> Topo
     end
 
-    Store -- POST {nodes, edges} --> API
+    Store -- "JSON {nodes, edges}" --> API
 ```
 
 ---
 
-## Part 1 — Node abstraction
+## 🧩 Node Abstraction (`BaseNode` & `createNode`)
 
-**Problem:** the starter code had four nodes (Input, LLM, Output, Text) that
-were ~80% identical — same box, same label styling, same handle boilerplate
-— with the only real differences being *which fields* and *which handles*
-each one needed.
-
-**Approach:** instead of a shared wrapper component that each node still has
-to import and assemble by hand, I went one level further: a `BaseNode`
-component that takes a **config object** and renders the entire node from
-it — header, fields (text/select/textarea/number), and handles, all
-positioned automatically.
+Instead of repeating markup boilerplate across nodes, Visflow uses a declarative **config-driven factory**:
 
 ```js
 export const FilterNode = createNode({
   title: 'Filter',
   icon: '🔍',
   accent: '#f59e0b',
-  fields: [{ name: 'condition', label: 'Condition', type: 'text', defaultValue: 'value > 0' }],
+  fields: [
+    { name: 'condition', label: 'Condition', type: 'text', defaultValue: 'value > 0' }
+  ],
   targetHandles: [{ id: 'input' }],
   sourceHandles: [{ id: 'output' }],
 });
 ```
 
-That's the entire node. `createNode()` (`nodes/createNode.js`) just wraps
-the config in a component that renders `<BaseNode config={...} />`.
+### Registered Node Types
 
-- `nodes/BaseNode.js` — the generic shell: layout, field rendering, handle
-  positioning, all styling driven by CSS classes so a global restyle only
-  touches one file.
-- `nodes/createNode.js` — turns a config into a component.
-- `nodes/inputNode.js`, `outputNode.js`, `llmNode.js` — the four original
-  nodes, rebuilt on the abstraction (down from ~40 lines each to ~15–20).
-- `nodes/extraNodes.js` — **5 new nodes** (Filter, Math, API Request, Delay,
-  Note) added to demonstrate the abstraction; each is a small config, no new
-  rendering code.
-- `nodes/textNode.js` — kept **outside** the factory on purpose. It has
-  behavior (auto-resize, dynamic handles from parsed text) that a static
-  config can't express, so it's a hand-written component that still reuses
-  the shared `nodes.css` for visual consistency.
+| Node Type | Category | Signature Color | Purpose |
+| :--- | :--- | :--- | :--- |
+| **Input** | Data I/O | Blue (`#3b82f6`) | Feed text or file data into the pipeline |
+| **Output** | Data I/O | Emerald (`#10b981`) | Final pipeline destination / result display |
+| **LLM Engine** | AI & Models | Violet (`#8b5cf6`) | AI model inference (GPT-4o, Claude 3.5, Gemini 1.5) |
+| **Text / Prompt** | AI & Models | Rose (`#ec4899`) | Dynamic prompt engineering with `{{var}}` handle generation |
+| **Filter** | Logic & Math | Amber (`#f59e0b`) | Conditional branching / logic expressions |
+| **Math** | Logic & Math | Crimson (`#ef4444`) | Mathematical calculations (`Add`, `Multiply`, etc.) |
+| **API Request** | Services | Cyan (`#06b6d4`) | External HTTP REST API integration |
+| **Delay** | Services | Purple (`#a855f7`) | Pipeline rate limiting / step delay |
+| **Note** | Notes | Slate (`#64748b`) | Collaborative canvas annotations |
 
-**Why a config abstraction over a plain wrapper component:** a wrapper still
-requires each node file to hand-assemble JSX (fields, handles, layout). A
-config makes adding a node a data-entry task, not a coding task — which is
-the actual goal stated in the prompt ("speeds up your ability to create new
-nodes").
+---
 
-## Part 2 — Styling
+## 🚀 Running the Project
 
-Single design system in `nodes/nodes.css` (node chrome) and `index.css`
-(app chrome — toolbar, canvas, submit bar, toast). Each node type gets a
-distinct accent color via its config (`accent: '#...'`) rendered as a top
-border, so the canvas stays scannable at a glance without needing per-node
-custom CSS.
-
-## Part 3 — Text node logic
-
-`nodes/textUtils.js` holds the variable-parsing logic (`extractVariables`),
-kept separate from the React component so it's independently unit-testable
-(`textUtils.test.js`) without rendering anything.
-
-- **Auto-resize:** the textarea's height is recalculated on every keystroke
-  from `scrollHeight`; node width scales gently with the longest line, capped
-  so it doesn't take over the canvas.
-- **Variable detection:** a regex matches `{{ identifier }}` (valid JS
-  identifier only — `{{1invalid}}` is intentionally ignored), deduplicates,
-  and each unique variable gets its own target handle, positioned and
-  labeled automatically.
-
-## Part 4 — Backend integration
-
-- `submit.js` POSTs `{ nodes, edges }` (the raw ReactFlow state) to
-  `/pipelines/parse` and shows the result in a small toast (not a native
-  `alert()`, to match the rest of the UI) — green for a valid DAG, red
-  otherwise, with a distinct message if the canvas is empty.
-- `backend/main.py` counts nodes/edges and checks DAG validity with **Kahn's
-  algorithm**, O(V + E) (repeatedly remove in-degree-0 nodes; if every node
-  gets removed, there's no cycle). Chosen over DFS-based cycle detection
-  because it's iterative (no recursion depth concerns on large pipelines)
-  and reads as directly as the definition of a DAG. The response is typed
-  with a Pydantic `ParseResponse` model and includes an optional
-  `cycle_nodes` list — the specific node IDs that couldn't be resolved —
-  additive to the required `{num_nodes, num_edges, is_dag}` contract, so it
-  doesn't break a grader checking for exactly those three fields.
-- `backend/test_main.py` — 10 unit tests: empty graph, isolated nodes, a
-  simple chain, a 3-cycle, a self-loop, a diamond (shared descendant,
-  correctly *not* flagged as a cycle), disconnected subgraphs (one cyclic,
-  one not — confirms the check doesn't assume a single connected graph),
-  and edges referencing a node ID not in the pipeline.
-
-## Running it
+### 1. Backend (FastAPI)
 
 ```bash
-# backend
 cd backend
 pip install -r requirements.txt
-uvicorn main:app --reload
-python -m pytest        # run backend tests
-
-# frontend (separate terminal)
-cd frontend
-npm install
-npm start
-npm test                # run frontend tests
+uvicorn main:app --reload --port 8000
+python -m pytest        # Run test suite (12 passed)
 ```
 
-## Scale considerations
+### 2. Frontend (React)
 
-A few decisions made specifically with "this needs to hold up past a demo"
-in mind, since node count and node-type count both grow quickly in
-practice:
+```bash
+cd frontend
+npm install
+npm start               # Starts dev server on http://localhost:3000
+npm test -- --watchAll=false # Run test suite (18 passed)
+```
 
-- **Re-render cost:** `store.js` only replaces the specific node object
-  that changed (`nodes.map(...)` returns the *same* reference for every
-  untouched node), which means every node component (`BaseNode`,
-  `TextNode`, and the components `createNode` produces) can be wrapped in
-  `React.memo` comparing `data` by reference and correctly skip re-rendering
-  when a sibling node's field changes — otherwise ReactFlow's internal
-  updates would re-render every node on the canvas on every keystroke
-  anywhere.
-- **Toolbar at scale:** with 9 node types a flat list is fine; with 50+ it
-  isn't. The toolbar now reads from a single `NODE_CATALOG` array (still a
-  one-line-per-node data entry, consistent with the node abstraction
-  itself) and has a live search filter — the seam where this would later
-  swap to a backend-fetched, possibly org-specific catalog without touching
-  the rendering logic.
-- **Text width measurement:** the original approach (`line.length * 8`)
-  is a monospace-shaped guess that's simply wrong for a proportional font.
-  It's replaced with actual canvas `measureText()` against the node's real
-  font, with a plain-arithmetic fallback for non-DOM environments (e.g. the
-  Jest/jsdom test run, which has no canvas implementation) so the sizing
-  logic stays unit-testable.
+---
 
-## Known trade-offs / what I'd do next with more time
+## 🧪 Testing & Verification
 
-- No persistence — pipelines live only in memory (`store.js`); a save/load
-  endpoint would be a natural next step.
-- The Math/API/Delay/Filter/Note nodes are structurally real but don't
-  execute anything — the assessment scoped this as an abstraction/UI
-  exercise, not a pipeline runtime.
+- **Backend Tests (`pytest`)**: 12 automated unit tests validating empty pipelines, chains, diamond DAGs, self-loops, disconnected subgraphs, topological execution order, and API endpoints.
+- **Frontend Tests (`jest`)**: 18 unit tests validating variable regex extraction, proportional text width calculations, and cycle prevention logic.
+
 
