@@ -110,6 +110,16 @@ export const PipelineToolbar = () => {
 
         {/* Action Center */}
         <div className="toolbar-actions">
+          <a
+            className="btn-action"
+            href="/architecture.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Read full Architecture & Engineering Guide"
+          >
+            📖 Docs
+          </a>
+
           <div className="template-dropdown-wrap">
             <button
               className="btn-action btn-template"
@@ -149,6 +159,7 @@ export const PipelineToolbar = () => {
           </button>
         </div>
       </div>
+
 
       {/* Filter and Search Bar */}
       <div className="toolbar-controls">
